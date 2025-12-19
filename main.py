@@ -1,6 +1,7 @@
 import yt_dlp
 import os
 import time
+import google.generativeai as genai
 from moviepy.editor import VideoFileClip
 import google.oauth2.credentials
 from googleapiclient.discovery import build
@@ -19,6 +20,15 @@ TARGET_USERNAMES = [
 # ==========================================
 
 HISTORY_FILE = "download_history.txt"
+
+# 1. SETUP
+def configure_ai():
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        print("⚠️ Gemini API Key nahi mili! Skipping AI.")
+        return False
+    genai.configure(api_key=api_key)
+    return True
 
 def get_youtube_service():
     client_id = os.environ.get("CLIENT_ID")
@@ -43,28 +53,75 @@ def get_youtube_service():
     creds = google.oauth2.credentials.Credentials.from_authorized_user_info(creds_data)
     return build("youtube", "v3", credentials=creds)
 
-# === HISTORY SYSTEM ===
+# 2. AI TITLE GENERATOR
+def generate_viral_metadata(video_path, original_title):
+    if not configure_ai():
+        return original_title, f"Original: {original_title} #shorts"
+
+    print("🧠 AI is watching video for Title...")
+    
+    try:
+        # Upload to Gemini
+        video_file = genai.upload_file(video_path)
+        
+        # Wait for processing
+        while video_file.state.name == "PROCESSING":
+            time.sleep(2)
+            video_file = genai.get_file(video_file.name)
+
+        if video_file.state.name == "FAILED":
+            raise Exception("Video processing failed")
+
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        
+        prompt = """
+        Watch this video.
+        Task 1: Write a viral, clickbaity Title (English/Hinglish, max 80 chars).
+        Task 2: Write a Description with 5 tags.
+        
+        Output format:
+        TITLE: [Your Title]
+        DESC: [Your Description]
+        """
+        
+        response = model.generate_content([video_file, prompt])
+        text = response.text
+        
+        ai_title = original_title
+        ai_desc = f"{original_title} #shorts"
+        
+        for line in text.split('\n'):
+            if line.startswith("TITLE:"):
+                ai_title = line.replace("TITLE:", "").strip()
+            if line.startswith("DESC:"):
+                ai_desc = line.replace("DESC:", "").strip()
+        
+        print(f"✨ AI Title: {ai_title}")
+        return ai_title, ai_desc
+
+    except Exception as e:
+        print(f"⚠️ AI Error (Using Original): {e}")
+        return original_title, f"{original_title} #shorts"
+
+# 3. CORE FUNCTIONS
 def load_history():
-    if not os.path.exists(HISTORY_FILE):
-        return []
-    with open(HISTORY_FILE, "r") as f:
-        return f.read().splitlines()
+    if not os.path.exists(HISTORY_FILE): return []
+    with open(HISTORY_FILE, "r") as f: return f.read().splitlines()
 
 def save_history(video_id):
-    with open(HISTORY_FILE, "a") as f:
-        f.write(f"{video_id}\n")
+    with open(HISTORY_FILE, "a") as f: f.write(f"{video_id}\n")
 
-def upload_to_youtube(filename, title, original_url):
+def upload_to_youtube(filename, title, description):
     youtube = get_youtube_service()
     if not youtube: return False
 
-    print(f"🚀 Uploading as PRIVATE: {title}")
+    print(f"🚀 Uploading PRIVATE: {title}")
     
     body = {
         "snippet": {
             "title": title[:99],
-            "description": f"{title}\n\nOriginal: {original_url}\n#shorts #viral #trending",
-            "tags": ["shorts", "viral", "tiktok", "funny"],
+            "description": description,
+            "tags": ["shorts", "viral", "tiktok"],
             "categoryId": "24"
         },
         "status": {
@@ -82,99 +139,61 @@ def upload_to_youtube(filename, title, original_url):
     
     try:
         response = request.execute()
-        print(f"✅ UPLOAD SUCCESS! Video ID: {response['id']}")
+        print(f"✅ UPLOAD SUCCESS! ID: {response['id']}")
         return True 
     except Exception as e:
         print(f"❌ Upload Failed: {e}")
         return False
 
 def process_videos(username):
-    print(f"🔍 Checking User: {username}...")
+    print(f"🔍 Checking: {username}...")
     history = load_history()
     
-    # === YAHAN CHANGE KIYA HAI (10 -> 50) ===
-    # Ab ye pichli 50 videos scan karega best video dhoondne ke liye
-    ydl_opts_check = {
-        'quiet': True,
-        'playlist_items': '1:50', 
-        'ignoreerrors': True
-    }
+    ydl_opts = {'quiet': True, 'playlist_items': '1:50', 'ignoreerrors': True}
     
-    user_url = f"https://www.tiktok.com/@{username}"
-    target_video_url = None
-    target_video_id = None
-    video_title = "Amazing Short"
+    target_video = None
+    original_title = "Shorts"
     
     try:
-        with yt_dlp.YoutubeDL(ydl_opts_check) as ydl:
-            info = ydl.extract_info(user_url, download=False)
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(f"https://www.tiktok.com/@{username}", download=False)
             if 'entries' not in info: return
             
-            # === SMART SELECTION LOOP ===
             for video in info['entries']:
                 if not video: continue
-                
                 v_id = video.get('id')
-                duration = video.get('duration', 0)
+                if v_id in history or video.get('duration', 0) > 180: continue
                 
-                # Check 1: History
-                if v_id in history:
-                    # Skip print hata diya taaki logs saaf rahein
-                    continue
-                
-                # Check 2: Duration (3 Min Limit)
-                if duration > 180:
-                    continue
-                
-                # AGAR YAHAN PAHUCHE, TO VIDEO MIL GAYI
-                print(f"✅ Found Fresh Content: {v_id} ({duration}s)")
-                target_video_url = video.get('webpage_url')
-                target_video_id = v_id
-                video_title = video.get('title', "Trending TikTok")
-                break 
-            
-    except Exception as e:
-        print(f"❌ Error checking {username}: {e}")
-        return
+                print(f"✅ Found Fresh: {v_id}")
+                target_video = video
+                original_title = video.get('title', "Shorts")
+                break
+    except: return
 
-    if not target_video_url:
-        print(f"😴 No new valid videos found for {username} in last 50 uploads.")
-        return
+    if not target_video: return
 
-    # === DOWNLOAD ===
+    # Download & Edit
     filename = f"{username}.mp4"
-    if os.path.exists(filename): os.remove(filename)
-
-    ydl_opts_download = {
-        'outtmpl': filename,
-        'format': 'best',
-        'quiet': True
-    }
-
-    with yt_dlp.YoutubeDL(ydl_opts_download) as ydl:
-        ydl.download([target_video_url])
-
-    if not os.path.exists(filename): return
-
-    # === EDITING ===
     final_filename = f"final_{username}.mp4"
+    
     try:
+        with yt_dlp.YoutubeDL({'outtmpl': filename, 'quiet': True}) as ydl:
+            ydl.download([target_video['webpage_url']])
+            
         clip = VideoFileClip(filename)
         w, h = clip.size
-        
         if w/h > 9/16:
             clip = clip.crop(x1=w/2-(h*9/16)/2, width=h*9/16, height=h)
-        
         clip.write_videofile(final_filename, codec="libx264", audio_codec="aac", verbose=False, logger=None)
         clip.close()
-        os.remove(filename) 
-    except Exception as e:
-        print(f"❌ Edit Error: {e}")
-        return
+        os.remove(filename)
+    except: return
 
-    # === UPLOAD & SAVE ===
-    success = upload_to_youtube(final_filename, video_title, target_video_url)
-    
-    if success and target_video_id:
-        save_history(target_video_id)
-        print(f"📝 Added to History: {target_video_id}")
+    # AI & Upload
+    title, desc = generate_viral_metadata(final_filename, original_title)
+    if upload_to_youtube(final_filename, title, desc):
+        save_history(target_video['id'])
+
+if __name__ == "__main__":
+    if not os.environ.get("GEMINI_API_KEY"): print("⚠️ Warning: AI Key missing.")
+    for user in TARGET_USERNAMES: process_videos(user)
