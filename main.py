@@ -1,32 +1,49 @@
 import yt_dlp
 import os
 
-def download_tiktok_video(video_url):
-    print(f"Attempting to download: {video_url}")
+# ==========================================
+# TUMHARI USER LIST
+# ==========================================
+TARGET_USERNAMES = [
+    ".smith58",
+    "bullymovie1995",
+    "ig.theshy6",
+    "lee.movie.10",
+    "lee.movie"
+]
+# ==========================================
+
+def download_user_latest_video(username):
+    # TikTok URL pattern
+    user_url = f"https://www.tiktok.com/@{username}"
+    print(f"🔍 Checking latest video for: {username}")
     
-    # Settings: MP4 format mein download karega
     ydl_opts = {
-        'outtmpl': 'downloaded_video.mp4',
+        # File ka naam: username.mp4
+        'outtmpl': f'{username}.mp4', 
         'format': 'best',
-        'quiet': False
+        'quiet': False,
+        'playlist_items': '1',  # Sirf 1 latest video
+        'ignoreerrors': True    # Agar koi user block ho to error na aaye
     }
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([video_url])
-        print("✅ Success! Video download ho gayi.")
+            ydl.download([user_url])
+        print(f"✅ Download Process complete for {username}")
         
-        # Check karte hain file sach mein aayi ya nahi
-        if os.path.exists('downloaded_video.mp4'):
-            size = os.path.getsize('downloaded_video.mp4')
-            print(f"File Size: {size} bytes")
+        # Check karte hain file aayi ya nahi
+        if os.path.exists(f"{username}.mp4"):
+            size = os.path.getsize(f"{username}.mp4")
+            print(f"📁 File saved: {username}.mp4 (Size: {size} bytes)")
         else:
-            print("❌ Error: Download complete bola par file nahi mili.")
+            print(f"⚠️ {username} ki video shayad download nahi hui.")
             
     except Exception as e:
-        print(f"❌ Error aagaya: {e}")
+        print(f"❌ Error with {username}: {e}")
 
 if __name__ == "__main__":
-    # Test ke liye ek viral video link
-    test_url = "https://www.tiktok.com/@khaby.lame/video/7238806263529606427" 
-    download_tiktok_video(test_url)
+    print("🚀 Bot shuru ho raha hai...")
+    for user in TARGET_USERNAMES:
+        download_user_latest_video(user)
+    print("🏁 Sabhi users check ho gaye.")
