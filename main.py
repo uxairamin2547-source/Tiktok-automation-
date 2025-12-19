@@ -1,13 +1,13 @@
 import yt_dlp
 import os
-import random
+import time
 from moviepy.editor import VideoFileClip
-from google.oauth2.credentials import Credentials
+import google.oauth2.credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 
 # ==========================================
-# 1. SETTINGS & USERS
+# TARGET USERS LIST
 # ==========================================
 TARGET_USERNAMES = [
     ".smith58",
@@ -16,120 +16,165 @@ TARGET_USERNAMES = [
     "lee.movie.10",
     "lee.movie"
 ]
-
-# Description mein yeh tags lagenge
-DESCRIPTION_TEXT = """
-Enjoy this viral video! 
-Like and Subscribe for more daily shorts.
-
-#shorts #viral #funny #tiktok #trending
-"""
-
 # ==========================================
-# 2. YOUTUBE UPLOAD FUNCTION
-# ==========================================
-def upload_to_youtube(filename, title):
-    print(f"🚀 Uploading to YouTube: {title}")
+
+HISTORY_FILE = "download_history.txt"
+
+def get_youtube_service():
+    client_id = os.environ.get("CLIENT_ID")
+    client_secret = os.environ.get("CLIENT_SECRET")
+    refresh_token = os.environ.get("REFRESH_TOKEN")
     
-    try:
-        # Token se login karna
-        creds = Credentials.from_authorized_user_file('token.json', ['https://www.googleapis.com/auth/youtube.upload'])
-        youtube = build('youtube', 'v3', credentials=creds)
+    if not client_id or not client_secret or not refresh_token:
+        print("❌ Error: GitHub Secrets missing.")
+        return None
 
-        request_body = {
-            'snippet': {
-                'title': title,
-                'description': DESCRIPTION_TEXT,
-                'tags': ['shorts', 'viral', 'funny', 'tiktok'],
-                'categoryId': '24' # Entertainment Category
-            },
-            'status': {
-                'privacyStatus': 'public', # 'private' kar sakte ho agar test karna ho
-                'selfDeclaredMadeForKids': False
-            }
+    creds_data = {
+        "client_id": client_id,
+        "client_secret": client_secret,
+        "refresh_token": refresh_token,
+        "token_uri": "https://oauth2.googleapis.com/token",
+        "client_id": client_id,
+        "client_secret": client_secret,
+        "scopes": ["https://www.googleapis.com/auth/youtube.upload"],
+        "expiry": "2030-01-01T00:00:00Z" 
+    }
+    
+    creds = google.oauth2.credentials.Credentials.from_authorized_user_info(creds_data)
+    return build("youtube", "v3", credentials=creds)
+
+# === HISTORY SYSTEM ===
+def load_history():
+    if not os.path.exists(HISTORY_FILE):
+        return []
+    with open(HISTORY_FILE, "r") as f:
+        return f.read().splitlines()
+
+def save_history(video_id):
+    with open(HISTORY_FILE, "a") as f:
+        f.write(f"{video_id}\n")
+
+def upload_to_youtube(filename, title, original_url):
+    youtube = get_youtube_service()
+    if not youtube: return False
+
+    print(f"🚀 Uploading as PRIVATE: {title}")
+    
+    body = {
+        "snippet": {
+            "title": title[:99],
+            "description": f"{title}\n\nOriginal: {original_url}\n#shorts #viral #trending",
+            "tags": ["shorts", "viral", "tiktok", "funny"],
+            "categoryId": "24"
+        },
+        "status": {
+            "privacyStatus": "private", 
+            "selfDeclaredMadeForKids": False
         }
-
-        media = MediaFileUpload(filename, chunksize=-1, resumable=True)
-        request = youtube.videos().insert(
-            part="snippet,status",
-            body=request_body,
-            media_body=media
-        )
-        
-        response = request.execute()
-        print(f"✅ UPLOAD SUCCESS! Video ID: {response['id']}")
-        return True
-
-    except Exception as e:
-        print(f"❌ Upload Error: {e}")
-        return False
-
-# ==========================================
-# 3. DOWNLOAD & PROCESS ENGINE
-# ==========================================
-def process_user(username):
-    # --- A. DOWNLOAD ---
-    raw_filename = f"{username}.mp4"
-    final_filename = f"final_{username}.mp4"
-    
-    # Safayi (Purani files hatao)
-    if os.path.exists(raw_filename): os.remove(raw_filename)
-    if os.path.exists(final_filename): os.remove(final_filename)
-
-    print(f"\n🔍 Checking User: {username}")
-    
-    ydl_opts = {
-        'outtmpl': raw_filename,
-        'format': 'best',
-        'quiet': True,
-        'playlist_items': '1', # Latest 1 video
-        'ignoreerrors': True
     }
 
+    media = MediaFileUpload(filename, chunksize=-1, resumable=True)
+    request = youtube.videos().insert(
+        part="snippet,status",
+        body=body,
+        media_body=media
+    )
+    
     try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([f"https://www.tiktok.com/@{username}"])
-    except:
-        print(f"⚠️ Skip: Could not download {username}")
+        response = request.execute()
+        print(f"✅ UPLOAD SUCCESS! Video ID: {response['id']}")
+        return True 
+    except Exception as e:
+        print(f"❌ Upload Failed: {e}")
+        return False
+
+def process_videos(username):
+    print(f"🔍 Checking User: {username}...")
+    history = load_history()
+    
+    # === YAHAN CHANGE KIYA HAI (10 -> 50) ===
+    # Ab ye pichli 50 videos scan karega best video dhoondne ke liye
+    ydl_opts_check = {
+        'quiet': True,
+        'playlist_items': '1:50', 
+        'ignoreerrors': True
+    }
+    
+    user_url = f"https://www.tiktok.com/@{username}"
+    target_video_url = None
+    target_video_id = None
+    video_title = "Amazing Short"
+    
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts_check) as ydl:
+            info = ydl.extract_info(user_url, download=False)
+            if 'entries' not in info: return
+            
+            # === SMART SELECTION LOOP ===
+            for video in info['entries']:
+                if not video: continue
+                
+                v_id = video.get('id')
+                duration = video.get('duration', 0)
+                
+                # Check 1: History
+                if v_id in history:
+                    # Skip print hata diya taaki logs saaf rahein
+                    continue
+                
+                # Check 2: Duration (3 Min Limit)
+                if duration > 180:
+                    continue
+                
+                # AGAR YAHAN PAHUCHE, TO VIDEO MIL GAYI
+                print(f"✅ Found Fresh Content: {v_id} ({duration}s)")
+                target_video_url = video.get('webpage_url')
+                target_video_id = v_id
+                video_title = video.get('title', "Trending TikTok")
+                break 
+            
+    except Exception as e:
+        print(f"❌ Error checking {username}: {e}")
         return
 
-    if not os.path.exists(raw_filename):
-        print(f"⚠️ No video found for {username}")
+    if not target_video_url:
+        print(f"😴 No new valid videos found for {username} in last 50 uploads.")
         return
 
-    # --- B. EDIT (CROP) ---
-    print(f"✂️ Processing: {raw_filename}")
+    # === DOWNLOAD ===
+    filename = f"{username}.mp4"
+    if os.path.exists(filename): os.remove(filename)
+
+    ydl_opts_download = {
+        'outtmpl': filename,
+        'format': 'best',
+        'quiet': True
+    }
+
+    with yt_dlp.YoutubeDL(ydl_opts_download) as ydl:
+        ydl.download([target_video_url])
+
+    if not os.path.exists(filename): return
+
+    # === EDITING ===
+    final_filename = f"final_{username}.mp4"
     try:
-        clip = VideoFileClip(raw_filename)
+        clip = VideoFileClip(filename)
         w, h = clip.size
         
-        # Crop logic (9:16 Ratio)
-        if (w / h) > (9 / 16):
-            new_width = h * (9 / 16)
-            x_center = w / 2
-            clip = clip.crop(x1=x_center - new_width/2, x2=x_center + new_width/2, width=new_width, height=h)
+        if w/h > 9/16:
+            clip = clip.crop(x1=w/2-(h*9/16)/2, width=h*9/16, height=h)
         
-        clip.write_videofile(final_filename, codec="libx264", audio_codec="aac", logger=None)
+        clip.write_videofile(final_filename, codec="libx264", audio_codec="aac", verbose=False, logger=None)
         clip.close()
-        os.remove(raw_filename) # Raw file delete
+        os.remove(filename) 
     except Exception as e:
         print(f"❌ Edit Error: {e}")
         return
 
-    # --- C. UPLOAD ---
-    # Title banate hain (Username + Random Emoji)
-    emojis = ["🔥", "😂", "😱", "❤️", "🚀"]
-    video_title = f"Amazing Video by {username} {random.choice(emojis)} #shorts"
+    # === UPLOAD & SAVE ===
+    success = upload_to_youtube(final_filename, video_title, target_video_url)
     
-    if os.path.exists(final_filename):
-        success = upload_to_youtube(final_filename, video_title)
-        
-        if success:
-            print("🗑️ Cleaning up...")
-            os.remove(final_filename)
-    
-if __name__ == "__main__":
-    print("🤖 BOT STARTED...")
-    for user in TARGET_USERNAMES:
-        process_user(user)
-    print("🏁 ALL DONE.")
+    if success and target_video_id:
+        save_history(target_video_id)
+        print(f"📝 Added to History: {target_video_id}")
