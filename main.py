@@ -1,9 +1,13 @@
 import yt_dlp
 import os
+import random
 from moviepy.editor import VideoFileClip
+from google.oauth2.credentials import Credentials
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload
 
 # ==========================================
-# TUMHARI USER LIST
+# 1. SETTINGS & USERS
 # ==========================================
 TARGET_USERNAMES = [
     ".smith58",
@@ -12,70 +16,120 @@ TARGET_USERNAMES = [
     "lee.movie.10",
     "lee.movie"
 ]
+
+# Description mein yeh tags lagenge
+DESCRIPTION_TEXT = """
+Enjoy this viral video! 
+Like and Subscribe for more daily shorts.
+
+#shorts #viral #funny #tiktok #trending
+"""
+
 # ==========================================
-
-def download_and_process(username):
-    # 1. DOWNLOAD PART
-    print(f"🎬 Downloading video for: {username}...")
+# 2. YOUTUBE UPLOAD FUNCTION
+# ==========================================
+def upload_to_youtube(filename, title):
+    print(f"🚀 Uploading to YouTube: {title}")
     
-    filename = f"{username}.mp4"
-    # Purani file ho to hata do
-    if os.path.exists(filename):
-        os.remove(filename)
+    try:
+        # Token se login karna
+        creds = Credentials.from_authorized_user_file('token.json', ['https://www.googleapis.com/auth/youtube.upload'])
+        youtube = build('youtube', 'v3', credentials=creds)
 
+        request_body = {
+            'snippet': {
+                'title': title,
+                'description': DESCRIPTION_TEXT,
+                'tags': ['shorts', 'viral', 'funny', 'tiktok'],
+                'categoryId': '24' # Entertainment Category
+            },
+            'status': {
+                'privacyStatus': 'public', # 'private' kar sakte ho agar test karna ho
+                'selfDeclaredMadeForKids': False
+            }
+        }
+
+        media = MediaFileUpload(filename, chunksize=-1, resumable=True)
+        request = youtube.videos().insert(
+            part="snippet,status",
+            body=request_body,
+            media_body=media
+        )
+        
+        response = request.execute()
+        print(f"✅ UPLOAD SUCCESS! Video ID: {response['id']}")
+        return True
+
+    except Exception as e:
+        print(f"❌ Upload Error: {e}")
+        return False
+
+# ==========================================
+# 3. DOWNLOAD & PROCESS ENGINE
+# ==========================================
+def process_user(username):
+    # --- A. DOWNLOAD ---
+    raw_filename = f"{username}.mp4"
+    final_filename = f"final_{username}.mp4"
+    
+    # Safayi (Purani files hatao)
+    if os.path.exists(raw_filename): os.remove(raw_filename)
+    if os.path.exists(final_filename): os.remove(final_filename)
+
+    print(f"\n🔍 Checking User: {username}")
+    
     ydl_opts = {
-        'outtmpl': filename,
+        'outtmpl': raw_filename,
         'format': 'best',
-        'quiet': False,
-        'playlist_items': '1',
+        'quiet': True,
+        'playlist_items': '1', # Latest 1 video
         'ignoreerrors': True
     }
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([f"https://www.tiktok.com/@{username}"])
-    except Exception as e:
-        print(f"❌ Error downloading {username}: {e}")
+    except:
+        print(f"⚠️ Skip: Could not download {username}")
         return
 
-    # Check agar file aayi
-    if not os.path.exists(filename):
-        print(f"⚠️ Video nahi mili: {username}")
+    if not os.path.exists(raw_filename):
+        print(f"⚠️ No video found for {username}")
         return
 
-    # 2. EDITING PART (Processing)
-    print(f"✂️ Processing (Checking Ratio): {filename}")
-    
+    # --- B. EDIT (CROP) ---
+    print(f"✂️ Processing: {raw_filename}")
     try:
-        clip = VideoFileClip(filename)
+        clip = VideoFileClip(raw_filename)
         w, h = clip.size
-        target_ratio = 9 / 16
-        current_ratio = w / h
-
-        # Agar video perfect vertical nahi hai, to usko crop karo
-        if current_ratio > target_ratio:
-            # Video zyada chaudi (wide) hai, sides se kaat do
-            new_width = h * target_ratio
+        
+        # Crop logic (9:16 Ratio)
+        if (w / h) > (9 / 16):
+            new_width = h * (9 / 16)
             x_center = w / 2
-            x1 = x_center - (new_width / 2)
-            x2 = x_center + (new_width / 2)
-            clip = clip.crop(x1=x1, y1=0, x2=x2, y2=h)
+            clip = clip.crop(x1=x_center - new_width/2, x2=x_center + new_width/2, width=new_width, height=h)
         
-        # Final file ka naam 'final_' se shuru hoga
-        final_filename = f"final_{username}.mp4"
-        clip.write_videofile(final_filename, codec="libx264", audio_codec="aac")
-        
-        print(f"✅ READY TO UPLOAD: {final_filename}")
-        
-        # Original file delete kar do space bachane ke liye
+        clip.write_videofile(final_filename, codec="libx264", audio_codec="aac", logger=None)
         clip.close()
-        os.remove(filename)
-        
+        os.remove(raw_filename) # Raw file delete
     except Exception as e:
-        print(f"❌ Error editing {username}: {e}")
+        print(f"❌ Edit Error: {e}")
+        return
 
+    # --- C. UPLOAD ---
+    # Title banate hain (Username + Random Emoji)
+    emojis = ["🔥", "😂", "😱", "❤️", "🚀"]
+    video_title = f"Amazing Video by {username} {random.choice(emojis)} #shorts"
+    
+    if os.path.exists(final_filename):
+        success = upload_to_youtube(final_filename, video_title)
+        
+        if success:
+            print("🗑️ Cleaning up...")
+            os.remove(final_filename)
+    
 if __name__ == "__main__":
-    print("🚀 Bot Started: Downloading & Editing...")
+    print("🤖 BOT STARTED...")
     for user in TARGET_USERNAMES:
-        download_and_process(user)
-    print("🏁 All Tasks Done.")
+        process_user(user)
+    print("🏁 ALL DONE.")
