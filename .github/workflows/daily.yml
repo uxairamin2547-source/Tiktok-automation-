@@ -1,7 +1,19 @@
 name: TikTok Auto Bot
 
 on:
-  workflow_dispatch:
+  schedule:
+    # GitHub UTC Time use karta hai.
+    # IST (India) se 5:30 ghante peeche.
+    # Humne tumhare timings convert kar diye hain:
+    # 11:30 AM IST = 06:00 UTC
+    # 02:30 PM IST = 09:00 UTC
+    # 05:30 PM IST = 12:00 UTC
+    # 08:30 PM IST = 15:00 UTC
+    # 10:30 PM IST = 17:00 UTC
+    # 01:30 AM IST = 20:00 UTC
+    - cron: '0 6,9,12,15,17,20 * * *'
+    
+  workflow_dispatch: # Button dabane par bhi chalega
 
 jobs:
   run-bot:
@@ -23,4 +35,8 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Bot chalao
+        env:
+          CLIENT_ID: ${{ secrets.CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
+          REFRESH_TOKEN: ${{ secrets.REFRESH_TOKEN }}
         run: python main.py
