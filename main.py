@@ -2,7 +2,7 @@ import yt_dlp
 import os
 import time
 import google.generativeai as genai
-from moviepy.editor import VideoFileClip, vfx
+from moviepy.editor import VideoFileClip
 import google.oauth2.credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
@@ -27,8 +27,12 @@ def configure_ai():
     if not api_key:
         print("⚠️ Gemini API Key nahi mili! Skipping AI.")
         return False
-    genai.configure(api_key=api_key)
-    return True
+    try:
+        genai.configure(api_key=api_key)
+        return True
+    except Exception as e:
+        print(f"⚠️ AI Config Error: {e}")
+        return False
 
 def get_youtube_service():
     client_id = os.environ.get("CLIENT_ID")
@@ -51,7 +55,7 @@ def get_youtube_service():
     creds = google.oauth2.credentials.Credentials.from_authorized_user_info(creds_data)
     return build("youtube", "v3", credentials=creds)
 
-# 2. AI TITLE GENERATOR (UPDATED FIX)
+# 2. AI TITLE GENERATOR (SMART AUTO-DETECT)
 def generate_viral_metadata(video_path, original_title):
     if not configure_ai():
         return original_title, f"Original: {original_title} #shorts"
@@ -59,10 +63,10 @@ def generate_viral_metadata(video_path, original_title):
     print("🧠 AI is watching video for Title...")
     
     try:
-        # Upload video to Gemini
+        # Upload video
+        print("📤 Uploading to Gemini...")
         video_file = genai.upload_file(video_path)
         
-        # Wait for processing
         while video_file.state.name == "PROCESSING":
             time.sleep(2)
             video_file = genai.get_file(video_file.name)
@@ -70,41 +74,51 @@ def generate_viral_metadata(video_path, original_title):
         if video_file.state.name == "FAILED":
             raise Exception("Video processing failed")
 
-        # ✅ FIX: Trying Standard Model Name first, then Fallback
+        # 👇 SMART LOGIC: Find FIRST available model
+        active_model = None
+        print("🔍 Searching for available models...")
         try:
-            model = genai.GenerativeModel('gemini-1.5-flash') # Removed 'models/' prefix
-            prompt = """
-            ACT AS: A Viral YouTube Shorts Expert.
-            TASK: Create a very short, shocking title and description.
-            
-            RULES FOR TITLE:
-            1. UNDER 5 WORDS.
-            2. Must be suspenseful or emotional.
-            3. End with #shorts
-            
-            RULES FOR DESCRIPTION:
-            1. 1-line summary.
-            2. Add this Disclaimer:
-            "Disclaimer: Any footage in this video has only been used to communicate a message (understandable) to audience. According to my knowledge, it’s a fair use under reviews and commentary section. We don't plan to violate anyone's right. Thanks."
-            3. Add 10 viral tags.
-            
-            OUTPUT FORMAT:
-            TITLE: [Your Title]
-            DESC: [Your Description]
-            """
-            response = model.generate_content([video_file, prompt])
+            for m in genai.list_models():
+                if 'generateContent' in m.supported_generation_methods:
+                    # Prefer Flash or Pro
+                    if 'flash' in m.name or 'pro' in m.name:
+                        active_model = genai.GenerativeModel(m.name)
+                        print(f"✅ Found & Using: {m.name}")
+                        break
         except Exception as e:
-            print(f"⚠️ Flash Model Error: {e}. Trying Backup...")
-            # Backup Model
-            model = genai.GenerativeModel('gemini-pro')
-            response = model.generate_content([prompt, "Generate metadata for a viral movie clip short."])
+            print(f"⚠️ List Models failed: {e}")
 
+        # Fallback if list fails
+        if not active_model:
+            print("⚠️ No model found in list, trying generic 'gemini-1.5-flash'...")
+            active_model = genai.GenerativeModel('gemini-1.5-flash')
+
+        prompt = """
+        ACT AS: A Viral YouTube Shorts Expert.
+        TASK: Create a very short, shocking title and description.
+        
+        RULES FOR TITLE:
+        1. UNDER 5 WORDS.
+        2. Must be suspenseful or emotional.
+        3. End with #shorts
+        
+        RULES FOR DESCRIPTION:
+        1. 1-line summary.
+        2. Add this Disclaimer:
+        "Disclaimer: Any footage in this video has only been used to communicate a message (understandable) to audience. According to my knowledge, it’s a fair use under reviews and commentary section. We don't plan to violate anyone's right. Thanks."
+        3. Add 10 viral tags.
+        
+        OUTPUT FORMAT:
+        TITLE: [Your Title]
+        DESC: [Your Description]
+        """
+        
+        response = active_model.generate_content([video_file, prompt])
         text = response.text
         
         ai_title = original_title
         ai_desc = f"{original_title} #shorts"
         
-        # Parsing response
         for line in text.split('\n'):
             if "TITLE:" in line:
                 clean_title = line.replace("TITLE:", "").replace("*", "").replace('"', '').strip()
@@ -112,7 +126,6 @@ def generate_viral_metadata(video_path, original_title):
             if "DESC:" in line:
                 ai_desc = line.replace("DESC:", "").replace("*", "").strip()
         
-        # Fallback cleanup
         if "DESC:" in text and "TITLE:" not in ai_title:
              parts = text.split("DESC:")
              if len(parts) > 1: ai_desc = parts[1].strip()
@@ -142,7 +155,7 @@ def upload_to_youtube(filename, title, description):
         "snippet": {
             "title": title[:99], 
             "description": description,
-            "tags": ["shorts", "viral", "movie", "explanation"],
+            "tags": ["shorts", "viral", "movie"],
             "categoryId": "24"
         },
         "status": {
@@ -170,7 +183,6 @@ def process_videos(username):
     print(f"🔍 Checking: {username}...")
     history = load_history()
     
-    # Check last 10 videos
     ydl_opts = {
         'quiet': True,
         'playlist_items': '1:10',
@@ -202,7 +214,6 @@ def process_videos(username):
     filename = f"{username}.mp4"
     final_filename = f"final_{username}.mp4"
     
-    # Download BEST Quality
     ydl_download_opts = {
         'outtmpl': filename,
         'quiet': True,
@@ -213,7 +224,6 @@ def process_videos(username):
         with yt_dlp.YoutubeDL(ydl_download_opts) as ydl:
             ydl.download([target_video['webpage_url']])
             
-        # SMART CROP (1080x1920)
         print("✂️ Fixing Ratio to 1080x1920 Full Screen...")
         clip = VideoFileClip(filename)
         
@@ -238,7 +248,6 @@ def process_videos(username):
         if os.path.exists(filename): os.remove(filename)
         return
 
-    # AI & Upload
     title, desc = generate_viral_metadata(final_filename, original_title)
     if upload_to_youtube(final_filename, title, desc):
         save_history(target_video['id'])
