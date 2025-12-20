@@ -24,7 +24,25 @@ TARGET_USERNAMES = [
 # ==========================================
 
 HISTORY_FILE = "download_history.txt"
-INDEX_FILE = "user_index.txt"  # Ye file yaad rakhegi kiski baari hai
+INDEX_FILE = "user_index.txt"
+
+# 👇 STATIC DESCRIPTION BLOCKS
+COPYRIGHT_DISCLAIMER = """Disclaimer: Any footage in this video has only been used to communicate a message (understandable) to audience. According to my knowledge, it’s a fair use under reviews and commentary section. We don't plan to violate anyone's right. Thanks."""
+
+VIRAL_TAGS_BLOCK = """🔥Tags 
+Movie Recap, Movie Explained, Ending Explained, Best Movie Scenes, Hidden Details, Full Movie Summary, Plot Twist, Film Analysis, Story Recapped, Cinema History, Blockbuster Movie Review, Hollywood Action Movies, Best Sci-Fi Movies, Thriller Movie Explanation, Horror Movie Recap, Mystery Movie Summary, Suspense Films, Underrated Movies, Movie Commentary, Film Theory, Character Analysis, Director's Cut, Behind The Scenes, Movie Mistakes, Film Easter Eggs, Best Netflix Movies, New Movie Recommendation, Must Watch Movies 2025.
+
+#MovieRecap #MovieExplained #EndingExplained"""
+
+# 👇 HIDDEN METADATA TAGS
+VIDEO_TAGS = [
+    "Movie Recaps", "Movie Explained", "Film Recap", "Story Recapped", "FixClipss", 
+    "UCNguyen", "Fresh2Movies", "MovieFocus", "MartianMeloDrama", "ZaynMovies", 
+    "movies", "film", "cinema", "viral", "shorts", "blockbuster", "hollywood", 
+    "action", "thriller", "horror", "sci-fi", "mystery", "suspense", "drama", 
+    "adventure", "fantasy", "animation", "review", "analysis", "top 10", 
+    "best movies", "film commentary", "movie summary", "cinema hall", "ending explained"
+]
 
 # 1. SETUP & AUTH
 def configure_ai():
@@ -55,7 +73,7 @@ def get_youtube_service():
     creds = google.oauth2.credentials.Credentials.from_authorized_user_info(creds_data)
     return build("youtube", "v3", credentials=creds)
 
-# 2. PATTERN MEMORY (Round Robin)
+# 2. PATTERN MEMORY
 def get_current_user_index():
     if not os.path.exists(INDEX_FILE): return 0
     try:
@@ -65,7 +83,6 @@ def get_current_user_index():
     except: return 0
 
 def save_next_user_index(current_idx):
-    # Agli baari agle bande ki (List khatam hui to wapas 0)
     next_idx = (current_idx + 1) % len(TARGET_USERNAMES)
     with open(INDEX_FILE, "w") as f:
         f.write(str(next_idx))
@@ -73,7 +90,11 @@ def save_next_user_index(current_idx):
 
 # 3. SMART AI & CORE FUNCTIONS
 def generate_viral_metadata(video_path, original_title):
-    if not configure_ai(): return original_title, f"{original_title} #shorts"
+    # Default fallback
+    fallback_title = f"{original_title} #shorts #viral"
+    fallback_desc = f"{original_title}\n\n{COPYRIGHT_DISCLAIMER}\n\n{VIRAL_TAGS_BLOCK}"
+
+    if not configure_ai(): return fallback_title, fallback_desc
 
     print("🧠 AI is watching video...")
     try:
@@ -84,7 +105,6 @@ def generate_viral_metadata(video_path, original_title):
         
         if video_file.state.name == "FAILED": raise Exception("Failed")
 
-        # Smart Model Detect (Jo available ho wahi uthayega - No 404)
         active_model = None
         try:
             for m in genai.list_models():
@@ -96,23 +116,29 @@ def generate_viral_metadata(video_path, original_title):
 
         prompt = """
         ACT AS: Viral Shorts Expert.
-        TASK: Create shocking title (Under 5 words) + description.
-        OUTPUT:
-        TITLE: [Title]
-        DESC: [Desc]
+        TASK: Create a shocking title (Max 5-6 words) and a 1-sentence summary.
+        OUTPUT FORMAT:
+        TITLE: [Your Title]
+        SUMMARY: [Your Summary]
         """
         response = active_model.generate_content([video_file, prompt])
         text = response.text
         
-        ai_title = original_title
-        ai_desc = f"{original_title} #shorts"
+        ai_title_raw = original_title
+        ai_summary = original_title
         
         for line in text.split('\n'):
-            if "TITLE:" in line: ai_title = line.replace("TITLE:", "").replace("*", "").strip()
-            if "DESC:" in line: ai_desc = line.replace("DESC:", "").replace("*", "").strip()
+            if "TITLE:" in line: ai_title_raw = line.replace("TITLE:", "").replace("*", "").replace('"', '').strip()
+            if "SUMMARY:" in line: ai_summary = line.replace("SUMMARY:", "").replace("*", "").strip()
             
-        return ai_title, ai_desc
-    except: return original_title, f"{original_title} #shorts"
+        # ✅ FINAL TITLE Construction
+        final_title = f"{ai_title_raw} #shorts #viral"
+        
+        # ✅ FINAL DESC Construction
+        final_desc = f"{ai_summary}\n\n{COPYRIGHT_DISCLAIMER}\n\n{VIRAL_TAGS_BLOCK}"
+            
+        return final_title, final_desc
+    except: return fallback_title, fallback_desc
 
 def load_history():
     if not os.path.exists(HISTORY_FILE): return []
@@ -125,7 +151,6 @@ def process_single_video(username):
     print(f"🔍 Checking turn for: {username}...")
     history = load_history()
     
-    # 👇 DEEP CHECK: Last 30 Videos check karega
     ydl_opts = {'quiet': True, 'playlist_items': '1:30', 'ignoreerrors': True, 'noplaylist': True}
     target_video = None
     
@@ -136,8 +161,8 @@ def process_single_video(username):
             
             for video in info['entries']:
                 if not video: continue
-                if video.get('id') in history: continue # Skip old videos
-                if video.get('duration', 0) > 180: continue # Skip long videos
+                if video.get('id') in history: continue
+                if video.get('duration', 0) > 180: continue
                 
                 print(f"✅ Found Fresh Video: {video['id']}")
                 target_video = video
@@ -154,12 +179,11 @@ def process_single_video(username):
         with yt_dlp.YoutubeDL({'outtmpl': filename, 'quiet': True, 'format': 'bestvideo+bestaudio/best'}) as ydl:
             ydl.download([target_video['webpage_url']])
             
-        # Ratio Fix (1080x1920 Full Screen)
+        # Ratio Fix
         clip = VideoFileClip(filename)
         tgt_w, tgt_h = 1080, 1920
         ratio = clip.w / clip.h
         
-        # Smart Resize Logic (No Black Bars)
         if ratio > tgt_w/tgt_h:
             clip = clip.resize(height=tgt_h)
             clip = clip.crop(x1=(clip.w/2 - tgt_w/2), width=tgt_w, height=tgt_h)
@@ -177,9 +201,20 @@ def process_single_video(username):
 
         title, desc = generate_viral_metadata(final_filename, target_video.get('title', 'Shorts'))
         
+        print(f"🚀 Uploading PUBLIC: {title}")
+        
         body = {
-            "snippet": {"title": title[:99], "description": desc, "tags": ["shorts", "viral", "tiktok"], "categoryId": "24"},
-            "status": {"privacyStatus": "private", "selfDeclaredMadeForKids": False}
+            "snippet": {
+                "title": title[:99], 
+                "description": desc, 
+                "tags": VIDEO_TAGS, # ✅ Static Tags Added
+                "categoryId": "24",
+                "defaultLanguage": "en" # ✅ Set to English
+            },
+            "status": {
+                "privacyStatus": "public", # ✅ Direct Public
+                "selfDeclaredMadeForKids": False
+            }
         }
         media = MediaFileUpload(final_filename, chunksize=-1, resumable=True)
         req = upload_service.videos().insert(part="snippet,status", body=body, media_body=media)
@@ -204,12 +239,12 @@ if __name__ == "__main__":
         user = TARGET_USERNAMES[current_check_index]
         
         if process_single_video(user):
-            print(f"🎉 Success! {user} ki video upload ho gayi.")
-            save_next_user_index(current_check_index) # Save next turn
+            print(f"🎉 Success! {user} ki video PUBLIC ho gayi.")
+            save_next_user_index(current_check_index)
             uploaded = True
-            break # 🛑 SIRF 1 VIDEO UPLOAD KARO AUR RUKO
+            break
         else:
-            print(f"⚠️ {user} ke paas nayi video nahi mili, Next user check kar raha hoon...")
+            print(f"⚠️ {user} ke paas nayi video nahi mili, Next user...")
             
     if not uploaded:
-        print("😴 Kisi bhi user ke paas nayi video nahi mili. Sone ja raha hoon.")
+        print("😴 Kisi bhi user ke paas nayi video nahi mili.")
