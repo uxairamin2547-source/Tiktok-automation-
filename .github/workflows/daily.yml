@@ -2,23 +2,14 @@ name: TikTok Auto Bot
 
 on:
   schedule:
-    # GitHub UTC Time use karta hai.
-    # IST (India) se 5:30 ghante peeche.
-    # Humne tumhare timings convert kar diye hain:
-    # 11:30 AM IST = 06:00 UTC
-    # 02:30 PM IST = 09:00 UTC
-    # 05:30 PM IST = 12:00 UTC
-    # 08:30 PM IST = 15:00 UTC
-    # 10:30 PM IST = 17:00 UTC
-    # 01:30 AM IST = 20:00 UTC
-    - cron: '0 6,9,12,15,17,20 * * *'
-    
-  workflow_dispatch: # Button dabane par bhi chalega
+    # Ye schedule hai: Subah 11:30, Shaam 5:30, Raat 11:30 (India Time approx)
+    - cron: '30 6,12,18 * * *'
+  workflow_dispatch:
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Code le kar aao (Checkout)
         uses: actions/checkout@v3
@@ -29,16 +20,18 @@ jobs:
           python-version: '3.9'
 
       - name: FFmpeg install karo
-        run: sudo apt-get install -y ffmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
 
       - name: Libraries install karo
-        run: pip install -r requirements.txt
+        run: |
+          pip install -r requirements.txt
 
-        - name: Run bot
+      - name: Bot chalao
         env:
           CLIENT_ID: ${{ secrets.CLIENT_ID }}
           CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
           REFRESH_TOKEN: ${{ secrets.REFRESH_TOKEN }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}  # <--- Ye line add karni hai
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python main.py
-
