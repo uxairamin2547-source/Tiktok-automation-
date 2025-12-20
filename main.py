@@ -8,7 +8,7 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 
 # ==========================================
-# 👇 FINAL USERNAME LIST (9 Users)
+# 👇 FINAL USERNAME LIST
 # ==========================================
 TARGET_USERNAMES = [
     ".smith58",
@@ -26,7 +26,7 @@ TARGET_USERNAMES = [
 HISTORY_FILE = "download_history.txt"
 INDEX_FILE = "user_index.txt"
 
-# 👇 STATIC DESCRIPTION BLOCKS
+# 👇 STATIC BLOCKS
 COPYRIGHT_DISCLAIMER = """Disclaimer: Any footage in this video has only been used to communicate a message (understandable) to audience. According to my knowledge, it’s a fair use under reviews and commentary section. We don't plan to violate anyone's right. Thanks."""
 
 VIRAL_TAGS_BLOCK = """🔥Tags 
@@ -34,7 +34,7 @@ Movie Recap, Movie Explained, Ending Explained, Best Movie Scenes, Hidden Detail
 
 #MovieRecap #MovieExplained #EndingExplained"""
 
-# 👇 HIDDEN METADATA TAGS
+# 👇 HIDDEN TAGS
 VIDEO_TAGS = [
     "Movie Recaps", "Movie Explained", "Film Recap", "Story Recapped", "FixClipss", 
     "UCNguyen", "Fresh2Movies", "MovieFocus", "MartianMeloDrama", "ZaynMovies", 
@@ -44,7 +44,7 @@ VIDEO_TAGS = [
     "best movies", "film commentary", "movie summary", "cinema hall", "ending explained"
 ]
 
-# 1. SETUP & AUTH
+# 1. SETUP
 def configure_ai():
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key: return False
@@ -73,7 +73,7 @@ def get_youtube_service():
     creds = google.oauth2.credentials.Credentials.from_authorized_user_info(creds_data)
     return build("youtube", "v3", credentials=creds)
 
-# 2. PATTERN MEMORY
+# 2. PATTERN
 def get_current_user_index():
     if not os.path.exists(INDEX_FILE): return 0
     try:
@@ -88,9 +88,8 @@ def save_next_user_index(current_idx):
         f.write(str(next_idx))
     print(f"💾 Next turn saved for User #{next_idx}")
 
-# 3. SMART AI & CORE FUNCTIONS
+# 3. AI & PROCESS
 def generate_viral_metadata(video_path, original_title):
-    # Default fallback
     fallback_title = f"{original_title} #shorts #viral"
     fallback_desc = f"{original_title}\n\n{COPYRIGHT_DISCLAIMER}\n\n{VIRAL_TAGS_BLOCK}"
 
@@ -131,10 +130,7 @@ def generate_viral_metadata(video_path, original_title):
             if "TITLE:" in line: ai_title_raw = line.replace("TITLE:", "").replace("*", "").replace('"', '').strip()
             if "SUMMARY:" in line: ai_summary = line.replace("SUMMARY:", "").replace("*", "").strip()
             
-        # ✅ FINAL TITLE Construction
         final_title = f"{ai_title_raw} #shorts #viral"
-        
-        # ✅ FINAL DESC Construction
         final_desc = f"{ai_summary}\n\n{COPYRIGHT_DISCLAIMER}\n\n{VIRAL_TAGS_BLOCK}"
             
         return final_title, final_desc
@@ -175,11 +171,9 @@ def process_single_video(username):
     final_filename = f"final_{username}.mp4"
     
     try:
-        # Download Best Quality
         with yt_dlp.YoutubeDL({'outtmpl': filename, 'quiet': True, 'format': 'bestvideo+bestaudio/best'}) as ydl:
             ydl.download([target_video['webpage_url']])
             
-        # Ratio Fix
         clip = VideoFileClip(filename)
         tgt_w, tgt_h = 1080, 1920
         ratio = clip.w / clip.h
@@ -195,7 +189,6 @@ def process_single_video(username):
         clip.close()
         os.remove(filename)
 
-        # Upload
         upload_service = get_youtube_service()
         if not upload_service: return False
 
@@ -207,12 +200,13 @@ def process_single_video(username):
             "snippet": {
                 "title": title[:99], 
                 "description": desc, 
-                "tags": VIDEO_TAGS, # ✅ Static Tags Added
+                "tags": VIDEO_TAGS,
                 "categoryId": "24",
-                "defaultLanguage": "en" # ✅ Set to English
+                "defaultLanguage": "en",       # ✅ Title/Desc Language
+                "defaultAudioLanguage": "en"   # ✅ Video Language (Ye Add kiya hai)
             },
             "status": {
-                "privacyStatus": "public", # ✅ Direct Public
+                "privacyStatus": "public",
                 "selfDeclaredMadeForKids": False
             }
         }
