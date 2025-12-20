@@ -8,7 +8,7 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 
 # ==========================================
-# 👇 USERNAME LIST (Yahan edit karein)
+# 👇 USERNAME LIST
 # ==========================================
 TARGET_USERNAMES = [
     ".smith58",
@@ -51,7 +51,7 @@ def get_youtube_service():
     creds = google.oauth2.credentials.Credentials.from_authorized_user_info(creds_data)
     return build("youtube", "v3", credentials=creds)
 
-# 2. AI TITLE GENERATOR
+# 2. AI TITLE GENERATOR (UPDATED FIX)
 def generate_viral_metadata(video_path, original_title):
     if not configure_ai():
         return original_title, f"Original: {original_title} #shorts"
@@ -70,30 +70,35 @@ def generate_viral_metadata(video_path, original_title):
         if video_file.state.name == "FAILED":
             raise Exception("Video processing failed")
 
-        # ✅ FIX: Using 'gemini-1.5-flash' which works best with new library
-        model = genai.GenerativeModel('gemini-1.5-flash')
-        
-        prompt = """
-        ACT AS: A Viral YouTube Shorts Expert.
-        TASK: Create a very short, shocking title and description.
-        
-        RULES FOR TITLE:
-        1. UNDER 5 WORDS.
-        2. Must be suspenseful or emotional.
-        3. End with #shorts
-        
-        RULES FOR DESCRIPTION:
-        1. 1-line summary.
-        2. Add this Disclaimer:
-        "Disclaimer: Any footage in this video has only been used to communicate a message (understandable) to audience. According to my knowledge, it’s a fair use under reviews and commentary section. We don't plan to violate anyone's right. Thanks."
-        3. Add 10 viral tags.
-        
-        OUTPUT FORMAT:
-        TITLE: [Your Title]
-        DESC: [Your Description]
-        """
-        
-        response = model.generate_content([video_file, prompt])
+        # ✅ FIX: Trying Standard Model Name first, then Fallback
+        try:
+            model = genai.GenerativeModel('gemini-1.5-flash') # Removed 'models/' prefix
+            prompt = """
+            ACT AS: A Viral YouTube Shorts Expert.
+            TASK: Create a very short, shocking title and description.
+            
+            RULES FOR TITLE:
+            1. UNDER 5 WORDS.
+            2. Must be suspenseful or emotional.
+            3. End with #shorts
+            
+            RULES FOR DESCRIPTION:
+            1. 1-line summary.
+            2. Add this Disclaimer:
+            "Disclaimer: Any footage in this video has only been used to communicate a message (understandable) to audience. According to my knowledge, it’s a fair use under reviews and commentary section. We don't plan to violate anyone's right. Thanks."
+            3. Add 10 viral tags.
+            
+            OUTPUT FORMAT:
+            TITLE: [Your Title]
+            DESC: [Your Description]
+            """
+            response = model.generate_content([video_file, prompt])
+        except Exception as e:
+            print(f"⚠️ Flash Model Error: {e}. Trying Backup...")
+            # Backup Model
+            model = genai.GenerativeModel('gemini-pro')
+            response = model.generate_content([prompt, "Generate metadata for a viral movie clip short."])
+
         text = response.text
         
         ai_title = original_title
@@ -108,7 +113,7 @@ def generate_viral_metadata(video_path, original_title):
                 ai_desc = line.replace("DESC:", "").replace("*", "").strip()
         
         # Fallback cleanup
-        if "DESC:" in text and "TITLE:" not in text:
+        if "DESC:" in text and "TITLE:" not in ai_title:
              parts = text.split("DESC:")
              if len(parts) > 1: ai_desc = parts[1].strip()
 
@@ -119,7 +124,7 @@ def generate_viral_metadata(video_path, original_title):
         print(f"⚠️ AI Error (Using Original): {e}")
         return original_title, f"{original_title} #shorts"
 
-# 3. CORE FUNCTIONS (Download -> Edit -> Upload)
+# 3. CORE FUNCTIONS
 def load_history():
     if not os.path.exists(HISTORY_FILE): return []
     with open(HISTORY_FILE, "r") as f: return f.read().splitlines()
@@ -165,10 +170,10 @@ def process_videos(username):
     print(f"🔍 Checking: {username}...")
     history = load_history()
     
-    # ✅ FIX: Force Best Quality Download
+    # Check last 10 videos
     ydl_opts = {
         'quiet': True,
-        'playlist_items': '1:10', # Check last 10 videos
+        'playlist_items': '1:10',
         'ignoreerrors': True,
         'noplaylist': True
     }
@@ -184,7 +189,6 @@ def process_videos(username):
             for video in info['entries']:
                 if not video: continue
                 v_id = video.get('id')
-                # 3 min limit
                 if v_id in history or video.get('duration', 0) > 180: continue
                 
                 print(f"✅ Found Fresh: {v_id}")
@@ -195,22 +199,21 @@ def process_videos(username):
 
     if not target_video: return
 
-    # Download
     filename = f"{username}.mp4"
     final_filename = f"final_{username}.mp4"
     
-    # ✅ FIX: Download BEST Quality settings
+    # Download BEST Quality
     ydl_download_opts = {
         'outtmpl': filename,
         'quiet': True,
-        'format': 'bestvideo+bestaudio/best' # Forces High Quality
+        'format': 'bestvideo+bestaudio/best'
     }
 
     try:
         with yt_dlp.YoutubeDL(ydl_download_opts) as ydl:
             ydl.download([target_video['webpage_url']])
             
-        # ✅ FIX: SMART CROP & RESIZE (1080x1920)
+        # SMART CROP (1080x1920)
         print("✂️ Fixing Ratio to 1080x1920 Full Screen...")
         clip = VideoFileClip(filename)
         
@@ -218,13 +221,10 @@ def process_videos(username):
         current_ratio = clip.w / clip.h
         target_ratio = target_w / target_h
 
-        # Resize Logic:
         if current_ratio > target_ratio:
-            # Wider than target -> Resize by Height, Crop Width
             clip = clip.resize(height=target_h)
             clip = clip.crop(x1=(clip.w/2 - target_w/2), width=target_w, height=target_h)
         else:
-            # Taller than target -> Resize by Width, Crop Height
             clip = clip.resize(width=target_w)
             clip = clip.crop(y1=(clip.h/2 - target_h/2), width=target_w, height=target_h)
             
