@@ -1,12 +1,14 @@
 name: TikTok Auto Bot
 
 on:
-  workflow_dispatch: # Button dabane par chalega
+  schedule:
+    - cron: '30 6,12,18 * * *'
+  workflow_dispatch:
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Code le kar aao (Checkout)
         uses: actions/checkout@v3
@@ -17,10 +19,18 @@ jobs:
           python-version: '3.9'
 
       - name: FFmpeg install karo
-        run: sudo apt-get install -y ffmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
 
       - name: Libraries install karo
-        run: pip install -r requirements.txt
+        run: |
+          pip install -r requirements.txt
 
       - name: Bot chalao
+        env:
+          CLIENT_ID: ${{ secrets.CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
+          REFRESH_TOKEN: ${{ secrets.REFRESH_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python main.py
