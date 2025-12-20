@@ -74,16 +74,37 @@ def generate_viral_metadata(video_path, original_title):
 
         model = genai.GenerativeModel('gemini-1.5-flash')
         
+        # 🛡️ Safe & Viral Prompt (Short Title + Disclaimer + SEO)
         prompt = """
-        Watch this video.
-        Task 1: Write a viral, clickbaity Title (English/Hinglish, max 80 chars).
-        Task 2: Write a Description with 5 tags.
+        ACT AS: A Viral YouTube Shorts Expert & SEO Specialist.
         
-        Output format:
-        TITLE: [Your Title]
-        DESC: [Your Description]
+        CONTEXT: I will show you a video. Your goal is to create metadata that is SAFE (Copyright-wise) and VIRAL.
+        
+        TASK 1: TITLE (Ultra Short & Catchy)
+        - Rule 1: The main text must be UNDER 30 CHARACTERS (Max 3-5 words).
+        - Rule 2: Add 1 relevant emoji after the text.
+        - Rule 3: You MUST end the title with: #viral #shorts
+        - Tone: Suspense, Shocking, or Emotional.
+        - Example Structure:
+            * He saved him 😱 #viral #shorts
+            * Best movie scene 🔥 #viral #shorts
+            * What happened? 💀 #viral #shorts
+        
+        TASK 2: DESCRIPTION (Story + Disclaimer + SEO)
+        - Part 1: A 1-line summary of the video.
+        - Part 2: The following Disclaimer exactly:
+            "Disclaimer: Any footage in this video has only been used to communicate a message (understandable) to audience. According to my knowledge, it’s a fair use under reviews and commentary section. We don't plan to violate anyone's right. Thanks."
+        - Part 3: A huge list of 20+ viral keywords/tags related to the video genre (Movie, Action, Thriller, etc.) for maximum SEO.
+        
+        OUTPUT FORMAT:
+        TITLE: [Your Short Title]
+        DESC: 
+        [Summary]
+        
+        [Disclaimer]
+        
+        [Keywords/Tags]
         """
-        
         response = model.generate_content([video_file, prompt])
         text = response.text
         
