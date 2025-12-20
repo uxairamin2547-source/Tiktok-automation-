@@ -8,7 +8,7 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 
 # ==========================================
-# 👇 FINAL USERNAME LIST (Updated)
+# 👇 FINAL USERNAME LIST (9 Users)
 # ==========================================
 TARGET_USERNAMES = [
     ".smith58",
@@ -41,7 +41,7 @@ def get_youtube_service():
     refresh_token = os.environ.get("REFRESH_TOKEN")
     
     if not client_id or not client_secret or not refresh_token:
-        print("❌ Error: Secrets missing.")
+        print("❌ Error: GitHub Secrets missing.")
         return None
 
     creds_data = {
@@ -55,13 +55,12 @@ def get_youtube_service():
     creds = google.oauth2.credentials.Credentials.from_authorized_user_info(creds_data)
     return build("youtube", "v3", credentials=creds)
 
-# 2. PATTERN MEMORY (Round Robin Logic)
+# 2. PATTERN MEMORY (Round Robin)
 def get_current_user_index():
     if not os.path.exists(INDEX_FILE): return 0
     try:
         with open(INDEX_FILE, "r") as f:
             idx = int(f.read().strip())
-            # Agar index list se bada ho gaya, to wapas 0 par aajao
             return idx if idx < len(TARGET_USERNAMES) else 0
     except: return 0
 
@@ -70,7 +69,7 @@ def save_next_user_index(current_idx):
     next_idx = (current_idx + 1) % len(TARGET_USERNAMES)
     with open(INDEX_FILE, "w") as f:
         f.write(str(next_idx))
-    print(f"💾 Pattern Updated: Next turn is User #{next_idx}")
+    print(f"💾 Next turn saved for User #{next_idx}")
 
 # 3. SMART AI & CORE FUNCTIONS
 def generate_viral_metadata(video_path, original_title):
@@ -85,7 +84,7 @@ def generate_viral_metadata(video_path, original_title):
         
         if video_file.state.name == "FAILED": raise Exception("Failed")
 
-        # Smart Model Detect (Jo available ho wahi uthayega)
+        # Smart Model Detect (Jo available ho wahi uthayega - No 404)
         active_model = None
         try:
             for m in genai.list_models():
@@ -126,8 +125,8 @@ def process_single_video(username):
     print(f"🔍 Checking turn for: {username}...")
     history = load_history()
     
-    # Check last 5 videos
-    ydl_opts = {'quiet': True, 'playlist_items': '1:5', 'ignoreerrors': True, 'noplaylist': True}
+    # 👇 DEEP CHECK: Last 30 Videos check karega
+    ydl_opts = {'quiet': True, 'playlist_items': '1:30', 'ignoreerrors': True, 'noplaylist': True}
     target_video = None
     
     try:
@@ -159,6 +158,8 @@ def process_single_video(username):
         clip = VideoFileClip(filename)
         tgt_w, tgt_h = 1080, 1920
         ratio = clip.w / clip.h
+        
+        # Smart Resize Logic (No Black Bars)
         if ratio > tgt_w/tgt_h:
             clip = clip.resize(height=tgt_h)
             clip = clip.crop(x1=(clip.w/2 - tgt_w/2), width=tgt_w, height=tgt_h)
@@ -177,7 +178,7 @@ def process_single_video(username):
         title, desc = generate_viral_metadata(final_filename, target_video.get('title', 'Shorts'))
         
         body = {
-            "snippet": {"title": title[:99], "description": desc, "tags": ["shorts"], "tiktok", "viral"], "categoryId": "24"},
+            "snippet": {"title": title[:99], "description": desc, "tags": ["shorts", "viral", "tiktok"], "categoryId": "24"},
             "status": {"privacyStatus": "private", "selfDeclaredMadeForKids": False}
         }
         media = MediaFileUpload(final_filename, chunksize=-1, resumable=True)
@@ -197,7 +198,6 @@ if __name__ == "__main__":
     start_index = get_current_user_index()
     print(f"🏁 Starting Check from User Index: {start_index}")
     
-    # Loop wahan se shuru hoga jiski baari hai
     uploaded = False
     for i in range(len(TARGET_USERNAMES)):
         current_check_index = (start_index + i) % len(TARGET_USERNAMES)
@@ -205,7 +205,7 @@ if __name__ == "__main__":
         
         if process_single_video(user):
             print(f"🎉 Success! {user} ki video upload ho gayi.")
-            save_next_user_index(current_check_index) # Agli baari agle ki
+            save_next_user_index(current_check_index) # Save next turn
             uploaded = True
             break # 🛑 SIRF 1 VIDEO UPLOAD KARO AUR RUKO
         else:
