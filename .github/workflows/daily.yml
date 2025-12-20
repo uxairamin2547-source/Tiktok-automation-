@@ -2,35 +2,45 @@ name: TikTok Auto Bot
 
 on:
   schedule:
-    - cron: '30 6,12,18 * * *'
+    # Har 4 ghante mein chalega (UTC Time) - Isey apne hisaab se rakhna
+    - cron: '0 4,8,12,16,20,0 * * *'
   workflow_dispatch:
+
+permissions:
+  contents: write  # 👈 YE SABSE ZAROORI HAI
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Code le kar aao (Checkout)
+      - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Python install karo
+      - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.9'
+          python-version: '3.10'
 
-      - name: FFmpeg install karo
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg
-
-      - name: Libraries install karo
+      - name: Install dependencies
         run: |
           pip install -r requirements.txt
 
-      - name: Bot chalao
+      - name: Run Bot Script
         env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           CLIENT_ID: ${{ secrets.CLIENT_ID }}
           CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
           REFRESH_TOKEN: ${{ secrets.REFRESH_TOKEN }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python main.py
+
+      # 👇 FINAL SAVE STEP (History + User Index)
+      - name: Save Bot Memory
+        if: always()
+        run: |
+          git config --global user.name 'GitHub Action Bot'
+          git config --global user.email 'action@github.com'
+          git pull
+          git add download_history.txt user_index.txt
+          git commit -m "Update history & turn pattern [skip ci]" || echo "No changes to commit"
+          git push
