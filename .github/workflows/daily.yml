@@ -34,9 +34,11 @@ jobs:
       - name: Libraries install karo
         run: pip install -r requirements.txt
 
-      - name: Bot chalao
+        - name: Run bot
         env:
           CLIENT_ID: ${{ secrets.CLIENT_ID }}
           CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
           REFRESH_TOKEN: ${{ secrets.REFRESH_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}  # <--- Ye line add karni hai
         run: python main.py
+
