@@ -30,18 +30,17 @@ INDEX_FILE = "user_index.txt"
 COPYRIGHT_DISCLAIMER = """Disclaimer: Any footage in this video has only been used to communicate a message (understandable) to audience. According to my knowledge, it’s a fair use under reviews and commentary section. We don't plan to violate anyone's right. Thanks."""
 
 VIRAL_TAGS_BLOCK = """🔥Tags 
-Movie Recap, Movie Explained, Ending Explained, Best Movie Scenes, Hidden Details, Full Movie Summary, Plot Twist, Film Analysis, Story Recapped, Cinema History, Blockbuster Movie Review, Hollywood Action Movies, Best Sci-Fi Movies, Thriller Movie Explanation, Horror Movie Recap, Mystery Movie Summary, Suspense Films, Underrated Movies, Movie Commentary, Film Theory, Character Analysis, Director's Cut, Behind The Scenes, Movie Mistakes, Film Easter Eggs, Best Netflix Movies, New Movie Recommendation, Must Watch Movies 2025.
+Movie Recap Shorts, Film Recap Shorts, Movie Explained Shorts, Story Recap Shorts, Cinema Shorts, Viral Movie Clips, Movie Reels, Film Reels, Short Film Clips, Movie Recap, Movie Explained, Ending Explained, Best Movie Scenes, Hidden Details, Full Movie Summary, Plot Twist, Film Analysis, Story Recapped, Cinema History, Blockbuster Movie Review, Hollywood Action Movies, Best Sci-Fi Movies, Thriller Movie Explanation, Horror Movie Recap, Mystery Movie Summary, Suspense Films, Underrated Movies, Movie Commentary, Film Theory, Character Analysis, Director's Cut, Behind The Scenes, Movie Mistakes, Film Easter Eggs, Best Netflix Movies, New Movie Recommendation, Must Watch Movies 2025.
 
-#MovieRecap #MovieExplained #EndingExplained"""
+#MovieRecap #MovieExplained #EndingExplained #moviereview #movie #movieclips #film #movieexplained  #moviescenes"""
 
 # 👇 HIDDEN TAGS
 VIDEO_TAGS = [
-    "Movie Recaps", "Movie Explained", "Film Recap", "Story Recapped", "FixClipss", 
-    "UCNguyen", "Fresh2Movies", "MovieFocus", "MartianMeloDrama", "ZaynMovies", 
+    "Movie Recaps", "Movie Explained", "Film Recap", "Story Recapped", "FixClipss", "Fresh2Movies", "MovieFocus", "MartianMeloDrama", "ZaynMovies", 
     "movies", "film", "cinema", "viral", "shorts", "blockbuster", "hollywood", 
     "action", "thriller", "horror", "sci-fi", "mystery", "suspense", "drama", 
     "adventure", "fantasy", "animation", "review", "analysis", "top 10", 
-    "best movies", "film commentary", "movie summary", "cinema hall", "ending explained"
+    "best movies", "film commentary", "movie summary", "cinema hall", "ending explained", "movie recap shorts"
 ]
 
 # 1. SETUP
@@ -114,11 +113,50 @@ def generate_viral_metadata(video_path, original_title):
         if not active_model: active_model = genai.GenerativeModel('gemini-1.5-flash')
 
         prompt = """
-        ACT AS: Viral Shorts Expert.
-        TASK: Create a shocking title (Max 5-6 words) and a 1-sentence summary.
-        OUTPUT FORMAT:
-        TITLE: [Your Title]
-        SUMMARY: [Your Summary]
+        ACT AS: YouTube Shorts growth expert specializing in movie recap and cinematic clip content.
+
+WATCH the given short video carefully and fully understand the story moment, emotional hook, and curiosity gap.
+
+TASK:
+Generate ONLY ONE viral title, ONE related emoji, ONE optimized description, and ONE relevant hashtag.
+
+RULES FOR TITLE:
+- Write ONE title only
+- Under 60 characters
+- Natural, human-written
+- Curiosity-driven but NOT exaggerated
+- No spoilers
+- No emojis inside the title text
+- No ALL CAPS
+- Avoid words like “shocking”, “unbelievable”
+
+RULES FOR EMOJI:
+- Provide EXACTLY ONE emoji
+- Emoji must match the title’s emotion or theme
+- Do NOT include text with the emoji
+
+RULES FOR DESCRIPTION:
+- Write ONE short description (3–4 lines max)
+- First line must hook the viewer
+- Briefly explain the situation without revealing the ending
+- Naturally include SEO keywords:
+  movie recap, film recap, movie explained, story recap
+- No keyword stuffing
+- No hashtags inside description
+- Do NOT repeat the title
+- End with soft curiosity (example: “Watch till the end.”)
+
+RULES FOR HASHTAG:
+- Provide EXACTLY ONE hashtag
+- Hashtag must be relevant to the video topic
+- Do NOT include multiple hashtags
+
+OUTPUT FORMAT (STRICT – FOLLOW EXACTLY):
+
+TITLE: <one title>
+EMOJI: <one emoji>
+SUMMARY: <one description>
+HASHTAG: <one hashtag>
         """
         response = active_model.generate_content([video_file, prompt])
         text = response.text
