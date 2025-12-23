@@ -2,13 +2,14 @@ import yt_dlp
 import os
 import time
 import google.generativeai as genai
-from moviepy.editor import VideoFileClip
+# 👇 UPDATE: Added modules for Black Background Logic
+from moviepy.editor import VideoFileClip, CompositeVideoClip, ColorClip
 import google.oauth2.credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 
 # ==========================================
-# 👇 FINAL USERNAME LIST
+# 👇 FINAL USERNAME LIST (Updated)
 # ==========================================
 TARGET_USERNAMES = [
     ".smith58",
@@ -19,7 +20,17 @@ TARGET_USERNAMES = [
     "kyee_films",
     "billygardner",
     "utodio.hz",
-    "yfuuet5"
+    "yfuuet5",
+    "oioi.movie1",
+    "loong.movie",
+    "milesmovies1",
+    "aire.movie",
+    "rushbolt42",
+    "shadownarrator13",
+    "lixchangysong",
+    "hoang.ae",
+    "1eesten",
+    "eiei.edit"
 ]
 # ==========================================
 
@@ -212,18 +223,36 @@ def process_single_video(username):
         with yt_dlp.YoutubeDL({'outtmpl': filename, 'quiet': True, 'format': 'bestvideo+bestaudio/best'}) as ydl:
             ydl.download([target_video['webpage_url']])
             
+        print("🎬 Editing Video (Fix Clips Style - No Crop)...")
+        # 👇 NEW LOGIC: Use CompositeVideoClip to put video on Black Background
         clip = VideoFileClip(filename)
-        tgt_w, tgt_h = 1080, 1920
-        ratio = clip.w / clip.h
+        if clip.audio:
+            clip = clip.set_audio(clip.audio.volumex(1.0))
         
-        if ratio > tgt_w/tgt_h:
-            clip = clip.resize(height=tgt_h)
-            clip = clip.crop(x1=(clip.w/2 - tgt_w/2), width=tgt_w, height=tgt_h)
+        # Target Dimensions
+        target_width, target_height = 1080, 1920
+
+        # Create Black Background
+        background = ColorClip(size=(target_width, target_height), color=(0,0,0), duration=clip.duration)
+
+        # Resize video to fit INSIDE 1080x1920 (Maintain Aspect Ratio)
+        video_ratio = clip.w / clip.h
+        target_ratio = target_width / target_height
+
+        if video_ratio > target_ratio:
+            # Video is wider than target slot -> Fit to Width (Black bars top/bottom)
+            video_clip = clip.resize(width=target_width)
         else:
-            clip = clip.resize(width=tgt_w)
-            clip = clip.crop(y1=(clip.h/2 - tgt_h/2), width=tgt_w, height=tgt_h)
+            # Video is taller/narrower -> Fit to Height (Black bars sides)
+            video_clip = clip.resize(height=target_height)
+
+        # Place resized video in CENTER of black background
+        final_clip = CompositeVideoClip([background, video_clip.set_position("center")])
+        final_clip = final_clip.set_audio(clip.audio) # Ensure audio is preserved
             
-        clip.write_videofile(final_filename, codec="libx264", audio_codec="aac", fps=30, verbose=False, logger=None)
+        final_clip.write_videofile(final_filename, codec="libx264", audio_codec="aac", fps=30, verbose=False, logger=None)
+        
+        final_clip.close()
         clip.close()
         os.remove(filename)
 
@@ -240,8 +269,8 @@ def process_single_video(username):
                 "description": desc, 
                 "tags": VIDEO_TAGS,
                 "categoryId": "24",
-                "defaultLanguage": "en",       # ✅ Title/Desc Language
-                "defaultAudioLanguage": "en"   # ✅ Video Language (Ye Add kiya hai)
+                "defaultLanguage": "en",       
+                "defaultAudioLanguage": "en"   
             },
             "status": {
                 "privacyStatus": "public",
