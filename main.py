@@ -2,11 +2,13 @@ import yt_dlp
 import os
 import time
 import google.generativeai as genai
-# 👇 BLACK BACKGROUND & RESIZING LOGIC MODULES
 from moviepy.editor import VideoFileClip, CompositeVideoClip, ColorClip
 import google.oauth2.credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
+# 👇 NEW: Time modules for 24-Hour Scheduling
+import datetime
+from datetime import timedelta
 
 # ==========================================
 # 👇 FINAL USERNAME LIST
@@ -37,18 +39,13 @@ TARGET_USERNAMES = [
 HISTORY_FILE = "download_history.txt"
 INDEX_FILE = "user_index.txt"
 
-# 👇 STATIC BLOCKS (UPDATED)
-
-# 1. HASHTAGS (New)
+# 👇 STATIC BLOCKS
 HASHTAGS_BLOCK = """#MovieRecap #MovieExplained #EndingExplained #moviereview #movie #movieclips #film #movieexplained  #moviescenes #ytshorts #fyp #horror #netflix #latest #movies #movieshorts"""
 
-# 2. TAGS FOR DESCRIPTION (New)
 VIRAL_TAGS_BLOCK = """Movie Recap Shorts, Film Recap Shorts, Movie Explained Shorts, Story Recap Shorts, Cinema Shorts, Viral Movie Clips, Movie Reels, Film Reels, Short Film Clips, Movie Recap, Movie Explained, Ending Explained, Best Movie Scenes, Hidden Details, Full Movie Summary, Plot Twist, Film Analysis, Story Recapped, Cinema History, Blockbuster Movie Review, Hollywood Action Movies, Best Sci-Fi Movies, Thriller Movie Explanation, Horror Movie Recap, Mystery Movie Summary, Suspense Films, Underrated Movies, Movie Commentary, Film Theory, Character Analysis, Director's Cut, Behind The Scenes, Movie Mistakes, Best Netflix Movies, New Movie Recommendation, Must Watch Movies 2026, Thriller movie recap, action movie shorts, shorts feed."""
 
-# 3. DISCLAIMER (End)
 COPYRIGHT_DISCLAIMER = """Disclaimer: Any footage in this video has only been used to communicate a message (understandable) to audience. According to my knowledge, it’s a fair use under reviews and commentary section. We don't plan to violate anyone's right. Thanks."""
 
-# 👇 HIDDEN TAGS (Updated)
 VIDEO_TAGS = [
     "movie recap", "movie clips", "film edits", "movie summaries", 
     "movie scene breakdown", "best movie moments", "movie analysis", 
@@ -101,9 +98,17 @@ def save_next_user_index(current_idx):
         f.write(str(next_idx))
     print(f"💾 Next turn saved for User #{next_idx}")
 
+# 👇 NEW FUNCTION: CALCULATE 24 HOURS FUTURE TIME
+def get_scheduled_time():
+    # Get current UTC time
+    now = datetime.datetime.utcnow()
+    # Add exactly 24 Hours (The Unlisted/Processing Rule)
+    future_time = now + timedelta(hours=24)
+    # Format required by YouTube API: ISO 8601 (YYYY-MM-DDThh:mm:ss.sZ)
+    return future_time.isoformat("T") + "Z"
+
 # 3. AI & PROCESS
 def generate_viral_metadata(video_path, original_title):
-    # Fallback in case AI fails
     fallback_title = f"{original_title} #shorts #viral"
     fallback_desc = f"{original_title}\n\n{HASHTAGS_BLOCK}\n\n{VIRAL_TAGS_BLOCK}\n\n{COPYRIGHT_DISCLAIMER}"
 
@@ -128,18 +133,14 @@ def generate_viral_metadata(video_path, original_title):
         if not active_model: active_model = genai.GenerativeModel('gemini-1.5-flash')
 
         prompt = """
-        ACT AS: YouTube Shorts growth expert specializing in movie recap and cinematic clip content.
-
+        ACT AS: YouTube Shorts growth expert specializing in movie recap.
         WATCH the given short video carefully.
-
-        TASK:
-        Generate ONLY ONE viral title and ONE short summary.
+        TASK: Generate ONLY ONE viral title and ONE short summary.
 
         RULES FOR TITLE:
         - Write ONE title only
         - Under 60 characters
-        - Natural, human-written
-        - Curiosity-driven but NOT exaggerated
+        - Natural, human-written, curiosity-driven
         - No spoilers, No emojis inside title
         - No ALL CAPS
 
@@ -147,7 +148,7 @@ def generate_viral_metadata(video_path, original_title):
         - Write ONE short description (3–4 lines max)
         - First line must hook the viewer
         - Briefly explain the situation without revealing the ending
-        - Naturally include SEO keywords: movie recap, film recap, movie explained
+        - Naturally include SEO keywords: movie recap, film recap
         - Do NOT repeat the title
         - End with: "Watch till the end."
 
@@ -166,8 +167,6 @@ def generate_viral_metadata(video_path, original_title):
             if "SUMMARY:" in line: ai_summary = line.replace("SUMMARY:", "").replace("*", "").strip()
             
         final_title = f"{ai_title_raw} #shorts #viral"
-        
-        # ORDER: 1. AI Summary, 2. Hashtags, 3. Tags, 4. Disclaimer
         final_desc = f"{ai_summary}\n\n{HASHTAGS_BLOCK}\n\n{VIRAL_TAGS_BLOCK}\n\n{COPYRIGHT_DISCLAIMER}"
             
         return final_title, final_desc
@@ -184,7 +183,6 @@ def process_single_video(username):
     print(f"🔍 Checking turn for: {username}...")
     history = load_history()
     
-    # Scan options
     ydl_opts = {'quiet': True, 'playlist_items': '1:30', 'ignoreerrors': True, 'noplaylist': True}
     target_video = None
     
@@ -209,7 +207,7 @@ def process_single_video(username):
     final_filename = f"final_{username}.mp4"
     
     try:
-        # 👇 UPDATE: Force Highest Quality (1080p Priority)
+        # FORCE HIGH QUALITY DOWNLOAD
         download_opts = {
             'outtmpl': filename, 
             'quiet': True, 
@@ -219,7 +217,7 @@ def process_single_video(username):
         with yt_dlp.YoutubeDL(download_opts) as ydl:
             ydl.download([target_video['webpage_url']])
             
-        print("🎬 Processing Video (High Quality + Upscaling)...")
+        print("🎬 Processing Video (Upscaling + No Crop)...")
         
         clip = VideoFileClip(filename)
         if clip.audio:
@@ -227,22 +225,16 @@ def process_single_video(username):
         
         # Target Dimensions (1080x1920)
         target_width, target_height = 1080, 1920
-
-        # Create Black Background
         background = ColorClip(size=(target_width, target_height), color=(0,0,0), duration=clip.duration)
 
-        # 👇 UPSCALING LOGIC: Resize to fill dimensions (Upscale if small)
         video_ratio = clip.w / clip.h
         target_ratio = target_width / target_height
 
         if video_ratio > target_ratio:
-            # Video is wider -> Fit to Width (Upscale to 1080 width)
             video_clip = clip.resize(width=target_width)
         else:
-            # Video is taller -> Fit to Height (Upscale to 1920 height)
             video_clip = clip.resize(height=target_height)
 
-        # Center on Black Background
         final_clip = CompositeVideoClip([background, video_clip.set_position("center")])
         final_clip = final_clip.set_audio(clip.audio) 
             
@@ -257,7 +249,9 @@ def process_single_video(username):
 
         title, desc = generate_viral_metadata(final_filename, target_video.get('title', 'Shorts'))
         
-        print(f"🚀 Uploading PUBLIC: {title}")
+        # 👇 NEW: Calculate time for 24 hours later
+        publish_at_time = get_scheduled_time()
+        print(f"🚀 Scheduling Video for: {publish_at_time}")
         
         body = {
             "snippet": {
@@ -269,14 +263,17 @@ def process_single_video(username):
                 "defaultAudioLanguage": "en"   
             },
             "status": {
-                "privacyStatus": "public",
+                # 👇 IMPORTANT: 'private' + 'publishAt' = Auto Public later
+                "privacyStatus": "private",
+                "publishAt": publish_at_time,
                 "selfDeclaredMadeForKids": False,
-                "publicStatsViewable": False  # 👈 Likes Hidden (Force Disable)
+                "publicStatsViewable": False
             }
         }
         media = MediaFileUpload(final_filename, chunksize=-1, resumable=True)
         req = upload_service.videos().insert(part="snippet,status", body=body, media_body=media)
         print(f"✅ UPLOAD SUCCESS! ID: {req.execute()['id']}")
+        print("🕒 Video is now SCHEDULED in YouTube Studio (will go public in 24 hours).")
         
         save_history(target_video['id'])
         os.remove(final_filename)
@@ -297,7 +294,7 @@ if __name__ == "__main__":
         user = TARGET_USERNAMES[current_check_index]
         
         if process_single_video(user):
-            print(f"🎉 Success! {user} ki video PUBLIC ho gayi.")
+            print(f"🎉 Success! {user} ki video SCHEDULED hai.")
             save_next_user_index(current_check_index)
             uploaded = True
             break
