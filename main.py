@@ -2,14 +2,14 @@ import yt_dlp
 import os
 import time
 import google.generativeai as genai
-# 👇 UPDATE: Added modules for Black Background Logic
+# 👇 BLACK BACKGROUND & RESIZING LOGIC MODULES
 from moviepy.editor import VideoFileClip, CompositeVideoClip, ColorClip
 import google.oauth2.credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 
 # ==========================================
-# 👇 FINAL USERNAME LIST (Updated)
+# 👇 FINAL USERNAME LIST
 # ==========================================
 TARGET_USERNAMES = [
     ".smith58",
@@ -37,21 +37,24 @@ TARGET_USERNAMES = [
 HISTORY_FILE = "download_history.txt"
 INDEX_FILE = "user_index.txt"
 
-# 👇 STATIC BLOCKS
+# 👇 STATIC BLOCKS (UPDATED)
+
+# 1. HASHTAGS (New)
+HASHTAGS_BLOCK = """#MovieRecap #MovieExplained #EndingExplained #moviereview #movie #movieclips #film #movieexplained  #moviescenes #ytshorts #fyp #horror #netflix #latest #movies #movieshorts"""
+
+# 2. TAGS FOR DESCRIPTION (New)
+VIRAL_TAGS_BLOCK = """Movie Recap Shorts, Film Recap Shorts, Movie Explained Shorts, Story Recap Shorts, Cinema Shorts, Viral Movie Clips, Movie Reels, Film Reels, Short Film Clips, Movie Recap, Movie Explained, Ending Explained, Best Movie Scenes, Hidden Details, Full Movie Summary, Plot Twist, Film Analysis, Story Recapped, Cinema History, Blockbuster Movie Review, Hollywood Action Movies, Best Sci-Fi Movies, Thriller Movie Explanation, Horror Movie Recap, Mystery Movie Summary, Suspense Films, Underrated Movies, Movie Commentary, Film Theory, Character Analysis, Director's Cut, Behind The Scenes, Movie Mistakes, Best Netflix Movies, New Movie Recommendation, Must Watch Movies 2026, Thriller movie recap, action movie shorts, shorts feed."""
+
+# 3. DISCLAIMER (End)
 COPYRIGHT_DISCLAIMER = """Disclaimer: Any footage in this video has only been used to communicate a message (understandable) to audience. According to my knowledge, it’s a fair use under reviews and commentary section. We don't plan to violate anyone's right. Thanks."""
 
-VIRAL_TAGS_BLOCK = """🔥Tags 
-Movie Recap Shorts, Film Recap Shorts, Movie Explained Shorts, Story Recap Shorts, Cinema Shorts, Viral Movie Clips, Movie Reels, Film Reels, Short Film Clips, Movie Recap, Movie Explained, Ending Explained, Best Movie Scenes, Hidden Details, Full Movie Summary, Plot Twist, Film Analysis, Story Recapped, Cinema History, Blockbuster Movie Review, Hollywood Action Movies, Best Sci-Fi Movies, Thriller Movie Explanation, Horror Movie Recap, Mystery Movie Summary, Suspense Films, Underrated Movies, Movie Commentary, Film Theory, Character Analysis, Director's Cut, Behind The Scenes, Movie Mistakes, Film Easter Eggs, Best Netflix Movies, New Movie Recommendation, Must Watch Movies 2025.
-
-#MovieRecap #MovieExplained #EndingExplained #moviereview #movie #movieclips #film #movieexplained  #moviescenes"""
-
-# 👇 HIDDEN TAGS
+# 👇 HIDDEN TAGS (Updated)
 VIDEO_TAGS = [
-    "Movie Recaps", "Movie Explained", "Film Recap", "Story Recapped", "FixClipss", "Fresh2Movies", "MovieFocus", "MartianMeloDrama", "ZaynMovies", 
-    "movies", "film", "cinema", "viral", "shorts", "blockbuster", "hollywood", 
-    "action", "thriller", "horror", "sci-fi", "mystery", "suspense", "drama", 
-    "adventure", "fantasy", "animation", "review", "analysis", "top 10", 
-    "best movies", "film commentary", "movie summary", "cinema hall", "ending explained", "movie recap shorts"
+    "movie recap", "movie clips", "film edits", "movie summaries", 
+    "movie scene breakdown", "best movie moments", "movie analysis", 
+    "behind the scenes film", "movie review", "cinematic highlights", 
+    "movie moments compilation", "movie plot explained", "top movie scenes", 
+    "film analysis", "movie favorites", "movie scene recaps"
 ]
 
 # 1. SETUP
@@ -100,8 +103,9 @@ def save_next_user_index(current_idx):
 
 # 3. AI & PROCESS
 def generate_viral_metadata(video_path, original_title):
+    # Fallback in case AI fails
     fallback_title = f"{original_title} #shorts #viral"
-    fallback_desc = f"{original_title}\n\n{COPYRIGHT_DISCLAIMER}\n\n{VIRAL_TAGS_BLOCK}"
+    fallback_desc = f"{original_title}\n\n{HASHTAGS_BLOCK}\n\n{VIRAL_TAGS_BLOCK}\n\n{COPYRIGHT_DISCLAIMER}"
 
     if not configure_ai(): return fallback_title, fallback_desc
 
@@ -126,48 +130,30 @@ def generate_viral_metadata(video_path, original_title):
         prompt = """
         ACT AS: YouTube Shorts growth expert specializing in movie recap and cinematic clip content.
 
-WATCH the given short video carefully and fully understand the story moment, emotional hook, and curiosity gap.
+        WATCH the given short video carefully.
 
-TASK:
-Generate ONLY ONE viral title, ONE related emoji, ONE optimized description, and ONE relevant hashtag.
+        TASK:
+        Generate ONLY ONE viral title and ONE short summary.
 
-RULES FOR TITLE:
-- Write ONE title only
-- Under 60 characters
-- Natural, human-written
-- Curiosity-driven but NOT exaggerated
-- No spoilers
-- No emojis inside the title text
-- No ALL CAPS
-- Avoid words like “shocking”, “unbelievable”
+        RULES FOR TITLE:
+        - Write ONE title only
+        - Under 60 characters
+        - Natural, human-written
+        - Curiosity-driven but NOT exaggerated
+        - No spoilers, No emojis inside title
+        - No ALL CAPS
 
-RULES FOR EMOJI:
-- Provide EXACTLY ONE emoji
-- Emoji must match the title’s emotion or theme
-- Do NOT include text with the emoji
+        RULES FOR SUMMARY:
+        - Write ONE short description (3–4 lines max)
+        - First line must hook the viewer
+        - Briefly explain the situation without revealing the ending
+        - Naturally include SEO keywords: movie recap, film recap, movie explained
+        - Do NOT repeat the title
+        - End with: "Watch till the end."
 
-RULES FOR DESCRIPTION:
-- Write ONE short description (3–4 lines max)
-- First line must hook the viewer
-- Briefly explain the situation without revealing the ending
-- Naturally include SEO keywords:
-  movie recap, film recap, movie explained, story recap
-- No keyword stuffing
-- No hashtags inside description
-- Do NOT repeat the title
-- End with soft curiosity (example: “Watch till the end.”)
-
-RULES FOR HASHTAG:
-- Provide EXACTLY ONE hashtag
-- Hashtag must be relevant to the video topic
-- Do NOT include multiple hashtags
-
-OUTPUT FORMAT (STRICT – FOLLOW EXACTLY):
-
-TITLE: <one title>
-EMOJI: <one emoji>
-SUMMARY: <one description>
-HASHTAG: <one hashtag>
+        OUTPUT FORMAT (STRICT):
+        TITLE: <one title>
+        SUMMARY: <one description>
         """
         response = active_model.generate_content([video_file, prompt])
         text = response.text
@@ -180,7 +166,9 @@ HASHTAG: <one hashtag>
             if "SUMMARY:" in line: ai_summary = line.replace("SUMMARY:", "").replace("*", "").strip()
             
         final_title = f"{ai_title_raw} #shorts #viral"
-        final_desc = f"{ai_summary}\n\n{COPYRIGHT_DISCLAIMER}\n\n{VIRAL_TAGS_BLOCK}"
+        
+        # ORDER: 1. AI Summary, 2. Hashtags, 3. Tags, 4. Disclaimer
+        final_desc = f"{ai_summary}\n\n{HASHTAGS_BLOCK}\n\n{VIRAL_TAGS_BLOCK}\n\n{COPYRIGHT_DISCLAIMER}"
             
         return final_title, final_desc
     except: return fallback_title, fallback_desc
@@ -196,6 +184,7 @@ def process_single_video(username):
     print(f"🔍 Checking turn for: {username}...")
     history = load_history()
     
+    # Scan options
     ydl_opts = {'quiet': True, 'playlist_items': '1:30', 'ignoreerrors': True, 'noplaylist': True}
     target_video = None
     
@@ -220,35 +209,42 @@ def process_single_video(username):
     final_filename = f"final_{username}.mp4"
     
     try:
-        with yt_dlp.YoutubeDL({'outtmpl': filename, 'quiet': True, 'format': 'bestvideo+bestaudio/best'}) as ydl:
+        # 👇 UPDATE: Force Highest Quality (1080p Priority)
+        download_opts = {
+            'outtmpl': filename, 
+            'quiet': True, 
+            'format': 'bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best'
+        }
+        
+        with yt_dlp.YoutubeDL(download_opts) as ydl:
             ydl.download([target_video['webpage_url']])
             
-        print("🎬 Editing Video (Fix Clips Style - No Crop)...")
-        # 👇 NEW LOGIC: Use CompositeVideoClip to put video on Black Background
+        print("🎬 Processing Video (High Quality + Upscaling)...")
+        
         clip = VideoFileClip(filename)
         if clip.audio:
             clip = clip.set_audio(clip.audio.volumex(1.0))
         
-        # Target Dimensions
+        # Target Dimensions (1080x1920)
         target_width, target_height = 1080, 1920
 
         # Create Black Background
         background = ColorClip(size=(target_width, target_height), color=(0,0,0), duration=clip.duration)
 
-        # Resize video to fit INSIDE 1080x1920 (Maintain Aspect Ratio)
+        # 👇 UPSCALING LOGIC: Resize to fill dimensions (Upscale if small)
         video_ratio = clip.w / clip.h
         target_ratio = target_width / target_height
 
         if video_ratio > target_ratio:
-            # Video is wider than target slot -> Fit to Width (Black bars top/bottom)
+            # Video is wider -> Fit to Width (Upscale to 1080 width)
             video_clip = clip.resize(width=target_width)
         else:
-            # Video is taller/narrower -> Fit to Height (Black bars sides)
+            # Video is taller -> Fit to Height (Upscale to 1920 height)
             video_clip = clip.resize(height=target_height)
 
-        # Place resized video in CENTER of black background
+        # Center on Black Background
         final_clip = CompositeVideoClip([background, video_clip.set_position("center")])
-        final_clip = final_clip.set_audio(clip.audio) # Ensure audio is preserved
+        final_clip = final_clip.set_audio(clip.audio) 
             
         final_clip.write_videofile(final_filename, codec="libx264", audio_codec="aac", fps=30, verbose=False, logger=None)
         
@@ -274,7 +270,8 @@ def process_single_video(username):
             },
             "status": {
                 "privacyStatus": "public",
-                "selfDeclaredMadeForKids": False
+                "selfDeclaredMadeForKids": False,
+                "publicStatsViewable": False  # 👈 Likes Hidden (Force Disable)
             }
         }
         media = MediaFileUpload(final_filename, chunksize=-1, resumable=True)
