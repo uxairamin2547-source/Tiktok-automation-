@@ -31,13 +31,12 @@ CATEGORY_MAP = {
 }
 
 def get_authenticated_service():
-    # Aapke Existing Secrets yahan use honge
     client_id = os.environ.get("CLIENT_ID")
     client_secret = os.environ.get("CLIENT_SECRET")
     refresh_token = os.environ.get("REFRESH_TOKEN")
     
     if not client_id or not client_secret or not refresh_token:
-        print("❌ Error: Secrets missing. Check GitHub Settings.")
+        print("❌ Error: Secrets missing.")
         return None
 
     creds_data = {
@@ -45,7 +44,8 @@ def get_authenticated_service():
         "client_secret": client_secret,
         "refresh_token": refresh_token,
         "token_uri": "https://oauth2.googleapis.com/token",
-        "scopes": ["https://www.googleapis.com/auth/youtube.readonly"], # Sirf dekhne ki permission
+        # 👇 FIX: Scope wahi rakha jo aapke paas pehle se hai (Upload wala)
+        "scopes": ["https://www.googleapis.com/auth/youtube.upload"],
         "expiry": "2030-01-01T00:00:00Z" 
     }
     
@@ -77,7 +77,7 @@ def get_channel_details(youtube, handle):
         playlist_request = youtube.playlistItems().list(
             part="snippet",
             playlistId=uploads_playlist_id,
-            maxResults=10 # Last 10 videos
+            maxResults=10
         )
         playlist_response = playlist_request.execute()
         
@@ -89,7 +89,7 @@ def get_channel_details(youtube, handle):
         for item in playlist_response['items']:
             video_id = item['snippet']['resourceId']['videoId']
 
-            # 3. Video details (Tags/Category)
+            # 3. Video details
             vid_req = youtube.videos().list(
                 part="snippet",
                 id=video_id
@@ -131,7 +131,7 @@ def get_channel_details(youtube, handle):
 if __name__ == "__main__":
     youtube = get_authenticated_service()
     if youtube:
-        print("🚀 STARTING SPY BOT (Using Your Secrets)...")
+        print("🚀 STARTING SPY BOT (Using Fixed Scope)...")
         for handle in TARGET_HANDLES:
             get_channel_details(youtube, handle)
         print("🏁 MISSION COMPLETE.")
